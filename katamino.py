@@ -1,46 +1,94 @@
-import numpy as np
+# import numpy as np
 import copy
 import pprint as pp
 import datetime as dt
 import math
 import time
 
-L = np.array([[1,0],
-              [1,0],
-              [1,0],
-              [1,1]])
-Y = np.array([[0,1],
-              [1,1],
-              [0,1],
-              [0,1]])
-T = np.array([[1,1,1],
-              [0,1,0],
-              [0,1,0]])
-N = np.array([[0,1],
-              [0,1],
-              [1,1],
-              [1,0]])
-P = np.array([[1,1],
-              [1,1],
-              [1,0]])
-U = np.array([[1,0,1],
-              [1,1,1]])
-V = np.array([[1,0,0],
-              [1,0,0],
-              [1,1,1]])
-F = np.array([[0,1,1],
-              [1,1,0],
-              [0,1,0]])
-Z = np.array([[1,1,0],
-              [0,1,0],
-              [0,1,1]])
-W = np.array([[1,0,0],
-              [1,1,0],
-              [0,1,1]])
-I = np.array([[1,1,1,1,1]])
-X = np.array([[0,1,0],
-              [1,1,1],
-              [0,1,0]])
+L = [0b10, 0b10, 0b10, 0b11]
+Y = [0b01, 0b11, 0b01, 0b01]
+T = [0b111, 0b010, 0b010]
+N = [0b01, 0b01, 0b11, 0b10]
+P = [0b11, 0b11, 0b10]
+U = [0b101, 0b111]
+V = [0b100, 0b100, 0b111]
+F = [0b011, 0b110, 0b010]
+Z = [0b110, 0b010, 0b011]
+W = [0b100, 0b110, 0b011]
+I = [0b1, 0b1, 0b1, 0b1, 0b1]
+X = [0b010, 0b111, 0b010]
+ALL_KEYS = {'L': L, 'Y': Y, 'T': T, 'N': N, 'P': P, 'U': U, 'V': V, 'F': F, 'Z': Z, 'W': W, 'I': I, 'X': X}
+
+def pprint(shape):
+    # get max width
+    max_width = 1
+    for b in shape:
+        width = len('{:b}'.format(b))
+        max_width = width if width > max_width else max_width
+    fmt = '{:0' + str(max_width) + 'b}'
+    for i in range(len(shape)):
+        print(fmt.format(shape[i]))
+
+def rot90(shape, count=1):
+    # shape can be 1D list of binary
+    target_shape = shape
+    ret = target_shape
+    for i in range(count):
+        # get max width
+        max_width = 1
+        for b in target_shape:
+            width = len('{:b}'.format(b))
+            max_width = width if width > max_width else max_width
+        ret = []
+        # rotare 90 degree to right
+        for col in range(max_width):
+            shape_row = 0
+            for row in range(len(target_shape)):
+                shape_row += ((target_shape[row] >> col) & 1) << row
+            ret.insert(0, shape_row)
+        target_shape = ret
+    return ret
+
+def flip(shape):
+    # shape can be 1D list of binary
+    # get max width
+    max_width = 1
+    for b in shape:
+        width = len('{:b}'.format(b))
+        max_width = width if width > max_width else max_width
+    ret = []
+    for row in range(len(shape)):
+        shape_row = 0
+        for col in range(max_width):
+            shape_row += ((shape[row] >> col) & 1) << (max_width - col - 1)
+        ret.append(shape_row)
+    return ret
+
+
+class Key:
+    name = ''
+    shape = []
+    rotates = []
+    rotates_noflip = []
+    def __init__(self, name) -> None:
+        self.name = name
+        self.shape = ALL_KEYS[name]
+        self.rotates = variations(self.shape)
+        self.rotates_noflip = variations(self.shape, True)
+
+def variations(shape, ignore_flipside=False):
+    shape_patterns = [shape, rot90(shape), rot90(shape, 2), rot90(shape, 3)]
+    if not ignore_flipside:
+        flipped = flip(shape)
+        shape_patterns.append(flipped)
+        shape_patterns.append(rot90(flipped))
+        shape_patterns.append(rot90(flipped, 2))
+        shape_patterns.append(rot90(flipped, 3))
+    unique = []
+    for sp in shape_patterns:
+        if not any(map(lambda k: k == sp, unique)):
+            unique.append(sp)
+    return unique
 
 # keys = [L, Y, T]
 keys = [L, Y, T, P]
@@ -85,7 +133,10 @@ keys = [L, Y, T, P]
 # keys = [L, V, P, Z, Y, W, N]
 # keys = [L, V, P, Z, Y, W, N, F]
 #base = np.zeros((5,5), dtype=int)
-base = np.zeros((5, len(keys)), dtype=int)
+#base = np.zeros((5, len(keys)), dtype=int)
+base = []
+for i in range(5):
+    base.append(0b1 << len(keys))
 
 status = []
 resolve = []
@@ -97,24 +148,26 @@ def fitbase(k, b, offset):
     return True, k_ope
 
 def put(k, b):
-    #if offset[0] + k.shape[0] > b.shape[0] or offset[1] + k.shape[1] > b.shape[1]:
-    #    return False, None
-    #k_ope = np.pad(k, [(offset[0], b.shape[0] - k.shape[0] - offset[0]),(offset[1], b.shape[1] - k.shape[1] - offset[1])], 'constant')
-    res = b + k
-    if res.max() > 1:
-        return False, res
-    else:
-        return True, res
+    #res = b + k
+    #if res.max() > 1:
+    #    return False, res
+    #else:
+    #    return True, res
+    res = []
+    ret = True
+    for i, row in b:
+        if (row & k[i]):
+            ret = False
+        res.append(row | k[i])
+    return ret, res
 
-def remove(k, b):
-    #if offset[0] + k.shape[0] > b.shape[0] or offset[1] + k.shape[1] > b.shape[1]:
-    #    return False, None
-    #k_ope = np.pad(k, [(offset[0], b.shape[0] - k.shape[0] - offset[0]),(offset[1], b.shape[1] - k.shape[1] - offset[1])], 'constant')
-    res = b - k
-    if res.min() < 0:
-        return False, res
-    else:
-        return True, res
+
+#def remove(k, b):
+    #res = b - k
+    #if res.min() < 0:
+    #    return False, res
+    #else:
+    #    return True, res
 
 key_pat = {}
 def key_variation(K, isFirst=False):
@@ -200,8 +253,7 @@ def has_lower5_closed_area(base):
 def solve(keys, part, b):
     # if K is the last item, just check the empty area
     if len(closed_areas) == 1 and len(closed_areas[0]) == 5:
-        empty_area = np.zeros(b.shape, dtype=int
-        )
+        empty_area = np.zeros(b.shape, dtype=int)
         for i in closed_areas[0]:
             empty_area[i] = 1
         rows = list(c[0] for c in closed_areas[0])
@@ -282,8 +334,8 @@ def pretty_print(statuses, start_symbol=1):
     print(ret)
 
 
-str_keys = ''
-all_keys = np.zeros((max(map(lambda k: k.shape[0], keys)), 1), dtype=int)
+#str_keys = ''
+#all_keys = np.zeros((max(map(lambda k: k.shape[0], keys)), 1), dtype=int)
 for i, k in enumerate(keys):
     # all_keys = np.concatenate(all_keys, k * (i + 1))
     # print(k * (i +1))
